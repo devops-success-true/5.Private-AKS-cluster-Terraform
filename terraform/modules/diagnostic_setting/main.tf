@@ -1,12 +1,4 @@
-terraform {
-  required_providers {
-    azurerm = {
-      source  = "hashicorp/azurerm"
-    }
-  }
 
-  required_version = ">= 0.14.9"
-}
 
 resource "azurerm_monitor_diagnostic_setting" "settings" {
   name                           = var.name

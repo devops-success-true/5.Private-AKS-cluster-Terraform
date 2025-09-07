@@ -1,12 +1,4 @@
-terraform {
-  required_providers {
-    azurerm = {
-      source  = "hashicorp/azurerm"
-    }
-  }
 
-  required_version = ">= 0.14.9"
-}
 
 data "azurerm_client_config" "current" {
 }

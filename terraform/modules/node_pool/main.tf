@@ -1,12 +1,4 @@
-terraform {
-  required_providers {
-    azurerm = {
-      source  = "hashicorp/azurerm"
-    }
-  }
 
-  required_version = ">= 0.14.9"
-}
 
 resource "azurerm_kubernetes_cluster_node_pool" "node_pool" {
   kubernetes_cluster_id        = var.kubernetes_cluster_id
