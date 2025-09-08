@@ -25,12 +25,14 @@ resource "azurerm_subnet" "subnet" {
 
 # ✅ Keep LAW for VNet platform logs, safe-guarded
 resource "azurerm_monitor_diagnostic_setting" "settings" {
-  count = var.log_analytics_workspace_id != "" && var.log_analytics_workspace_id != null ? 1 : 0
+  count = var.enable_diagnostics ? 1 : 0
 
   name                       = "DiagnosticsSettings"
   target_resource_id         = azurerm_virtual_network.vnet.id
   log_analytics_workspace_id = var.log_analytics_workspace_id
 
-  enabled_log { category = "VMProtectionAlerts" }
-  metric     { category = "AllMetrics" }
+  metric {
+    category = "AllMetrics"
+    enabled  = true
+  }
 }

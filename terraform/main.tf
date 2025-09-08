@@ -2,7 +2,7 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "~>3.50.0"
+      version = "~>3.115.0"
     }
   }
 
@@ -13,10 +13,11 @@ provider "azurerm" {
   features {}
 }
 
-terraform {
-  backend "azurerm" {
-  }
-}
+# Commented out: Remote backend (we’ll use local state instead)
+# terraform {
+#   backend "azurerm" {
+#   }
+# }
 
 locals {
   storage_account_prefix = "boot"
@@ -24,8 +25,8 @@ locals {
   route_name             = "RouteToAzureFirewall"
 }
 
-data "azurerm_client_config" "current" {
-}
+data "azurerm_client_config" "current" {}
+
 
 resource "azurerm_resource_group" "rg" {
   name     = var.resource_group_name
@@ -34,11 +35,16 @@ resource "azurerm_resource_group" "rg" {
 }
 
 module "log_analytics_workspace" {
-  source                           = "./modules/log_analytics"
-  name                             = var.log_analytics_workspace_name
-  location                         = var.location
-  resource_group_name              = azurerm_resource_group.rg.name
-  solution_plan_map                = var.solution_plan_map
+  source              = "./modules/log_analytics"
+  name                = var.log_analytics_workspace_name
+  location            = var.location
+  resource_group_name = azurerm_resource_group.rg.name
+  sku                 = var.log_analytics_sku
+  retention_in_days   = var.log_analytics_retention_days
+  tags                = var.tags
+
+  enable_diagnostics  = false
+  solution_plan_map   = var.solution_plan_map
 }
 
 module "hub_network" {
@@ -191,7 +197,6 @@ module "aks_cluster" {
   outbound_type                            = "userDefinedRouting"
   network_service_cidr                     = var.network_service_cidr
   log_analytics_workspace_id               = module.log_analytics_workspace.id
-  role_based_access_control_enabled        = var.role_based_access_control_enabled
   tenant_id                                = data.azurerm_client_config.current.tenant_id
   admin_group_object_ids                   = var.admin_group_object_ids
   azure_rbac_enabled                       = var.azure_rbac_enabled

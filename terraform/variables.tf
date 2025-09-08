@@ -10,6 +10,13 @@ variable "log_analytics_retention_days" {
   default     = 30
 }
 
+
+variable "log_analytics_sku" {
+  description = "Specifies the SKU of the Log Analytics workspace (Free, PerGB2018, Standalone, CapacityReservation)"
+  type        = string
+  default     = "PerGB2018"
+}
+
 variable "solution_plan_map" {
   description = "Specifies solutions to deploy to log analytics workspace"
   default     = {
@@ -87,11 +94,7 @@ variable "aks_cluster_name" {
   type        = string
 }
 
-variable "role_based_access_control_enabled" {
-  description = "(Required) Is Role Based Access Control Enabled? Changing this forces a new resource to be created."
-  default     = true
-  type        = bool
-}
+
 
 variable "automatic_channel_upgrade" {
   description = "(Optional) The upgrade channel for this Kubernetes Cluster. Possible values are patch, rapid, and stable."
@@ -106,7 +109,7 @@ variable "automatic_channel_upgrade" {
 
 variable "admin_group_object_ids" {
   description = "(Optional) A list of Object IDs of Microsoft Entra ID Groups which should have Admin Role on the Cluster."
-  default     = ["6e5de8c1-5a4b-409b-994f-0706e4403b77", "78761057-c58c-44b7-aaa7-ce1639c6c4f5"]
+  default     = []
   type        = list(string)
 }
 
@@ -129,13 +132,13 @@ variable "sku_tier" {
 
 variable "kubernetes_version" {
   description = "Specifies the AKS Kubernetes version"
-  default     = "1.21.1"
+  default     = "1.29.5"
   type        = string
 }
 
 variable "default_node_pool_vm_size" {
   description = "Specifies the vm size of the default node pool"
-  default     = "Standard_F8s_v2"
+  default     = "Standard_D2s_v3"
   type        = string
 }
 
@@ -274,7 +277,7 @@ variable "additional_node_pool_name" {
 variable "additional_node_pool_vm_size" {
   description = "(Required) The SKU which should be used for the Virtual Machines used in this Node Pool. Changing this forces a new resource to be created."
   type        = string
-  default     = "Standard_F8s_v2"
+  default     = "Standard_D2s_v3"
 }
 
 variable "additional_node_pool_availability_zones" {
@@ -426,7 +429,7 @@ variable "vm_public_ip" {
 
 variable "vm_size" {
   description = "Specifies the size of the jumpbox virtual machine"
-  default     = "Standard_DS1_v2"
+  default     = "Standard_D2s_v3"
   type        = string
 }
 
@@ -682,3 +685,23 @@ variable "http_application_routing_enabled" {
   type        = bool
   default     = false
 }
+
+# Labels to apply to the default node pool
+variable "default_node_pool_node_labels" {
+  description = "Map of labels to assign to the default node pool. Commonly used for scheduling workloads."
+  type        = map(string)
+}
+
+# Taints to apply to the default node pool
+variable "default_node_pool_node_taints" {
+  description = "List of taints to assign to the default node pool. Useful for workload isolation (e.g., system pods only)."
+  type        = list(string)
+}
+
+variable "enable_diagnostics" {
+  description = "Enable diagnostic settings for resources"
+  type        = bool
+  default     = false
+}
+
+

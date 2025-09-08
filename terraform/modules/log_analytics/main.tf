@@ -1,5 +1,3 @@
-
-
 locals {
   module_tag = {
     "module" = basename(abspath(path.module))
@@ -7,23 +5,25 @@ locals {
   tags = merge(var.tags, local.module_tag)
 }
 
+# Log Analytics Workspace
 resource "azurerm_log_analytics_workspace" "log_analytics_workspace" {
   name                = var.name
   location            = var.location
   resource_group_name = var.resource_group_name
   sku                 = var.sku
-  tags                = local.tags
   retention_in_days   = var.retention_in_days != "" ? var.retention_in_days : null
+  tags                = local.tags
 
   lifecycle {
-      ignore_changes = [
-          tags
-      ]
+    ignore_changes = [
+      tags
+    ]
   }
 }
 
+# Optional Solutions (e.g., ContainerInsights, VMInsights)
 resource "azurerm_log_analytics_solution" "la_solution" {
-  for_each = var.solution_plan_map
+  for_each = var.enable_diagnostics ? var.solution_plan_map : {}
 
   solution_name         = each.key
   location              = var.location
@@ -37,8 +37,6 @@ resource "azurerm_log_analytics_solution" "la_solution" {
   }
 
   lifecycle {
-    ignore_changes = [
-      tags
-    ]
+    ignore_changes = [tags]
   }
 }

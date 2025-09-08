@@ -41,11 +41,7 @@ variable "admin_group_object_ids" {
   type        = list(string)
 }
 
-variable "role_based_access_control_enabled" {
-  description = "(Required) Is Role Based Access Control Enabled? Changing this forces a new resource to be created."
-  default     = true
-  type        = bool
-}
+
 
 variable "automatic_channel_upgrade" {
   description = "(Optional) The upgrade channel for this Kubernetes Cluster. Possible values are patch, rapid, and stable."
@@ -71,13 +67,13 @@ variable "sku_tier" {
 
 variable "kubernetes_version" {
   description = "Specifies the AKS Kubernetes version"
-  default     = "1.21.1"
+  default     = "1.29.4"
   type        = string
 }
 
 variable "default_node_pool_vm_size" {
   description = "Specifies the vm size of the default node pool"
-  default     = "Standard_F8s_v2"
+  default     = "Standard_B2s"
   type        = string
 }
 
@@ -179,19 +175,19 @@ variable "default_node_pool_os_disk_type" {
 variable "default_node_pool_max_count" {
   description = "(Required) The maximum number of nodes which should exist within this Node Pool. Valid values are between 0 and 1000 and must be greater than or equal to min_count."
   type          = number
-  default       = 10
+  default       = 3
 }
 
 variable "default_node_pool_min_count" {
   description = "(Required) The minimum number of nodes which should exist within this Node Pool. Valid values are between 0 and 1000 and must be less than or equal to max_count."
   type          = number
-  default       = 3
+  default       = 1
 }
 
 variable "default_node_pool_node_count" {
   description = "(Optional) The initial number of nodes which should exist within this Node Pool. Valid values are between 0 and 1000 and must be a value in the range min_count - max_count."
   type          = number
-  default       = 3
+  default       = 1
 }
 
 variable "log_analytics_workspace_id" {
@@ -308,3 +304,6 @@ variable "http_application_routing_enabled" {
   type        = bool
   default     = false
 }
+
+
+

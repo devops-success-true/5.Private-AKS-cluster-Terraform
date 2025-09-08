@@ -1,4 +1,3 @@
-}
 
 resource "azurerm_key_vault" "key_vault" {
   name                            = var.name

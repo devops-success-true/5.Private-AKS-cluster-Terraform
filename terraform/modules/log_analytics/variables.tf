@@ -41,3 +41,9 @@ variable "retention_in_days" {
   type        = number
   default     = 30
 }
+
+variable "enable_diagnostics" {
+  description = "Enable creation of Log Analytics Solutions (ContainerInsights, etc.)"
+  type        = bool
+  default     = false
+}

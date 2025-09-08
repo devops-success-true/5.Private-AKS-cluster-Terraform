@@ -59,3 +59,4 @@ variable "tags" {
 variable "private_dns" {
   default = {}
 }
+

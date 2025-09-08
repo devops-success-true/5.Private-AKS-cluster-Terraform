@@ -112,3 +112,9 @@ variable "script_name" {
   description = "(Required) Specifies the name of the custom script."
   type        = string
 }
+
+variable "enable_diagnostics" {
+  description = "Enable diagnostic settings for resources"
+  type        = bool
+  default     = false
+}

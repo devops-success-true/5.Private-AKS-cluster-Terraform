@@ -37,3 +37,10 @@ variable "log_analytics_workspace_id" {
   description = "Specifies the log analytics workspace id"
   type        = string
 }
+
+variable "enable_diagnostics" {
+  description = "Enable diagnostic settings for resources"
+  type        = bool
+  default     = false
+}
+
