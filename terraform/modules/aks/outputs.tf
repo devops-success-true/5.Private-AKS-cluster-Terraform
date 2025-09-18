@@ -1,21 +1,24 @@
 output "oidc_issuer_url" {
-  value = azurerm_kubernetes_cluster.this.oidc_issuer_profile.0.issuer_url
+  value = azurerm_kubernetes_cluster.aks_cluster.oidc_issuer_profile.0.issuer_url
 }
 
 output "host" {
-  value = azurerm_kubernetes_cluster.this.kube_config.0.host
+  value = azurerm_kubernetes_cluster.aks_cluster.kube_config.0.host
 }
 
 output "client_certificate" {
-  value = azurerm_kubernetes_cluster.this.kube_config.0.client_certificate
+  value = azurerm_kubernetes_cluster.aks_cluster.kube_config.0.client_certificate
+  sensitive = true
 }
 
 output "client_key" {
-  value = azurerm_kubernetes_cluster.this.kube_config.0.client_key
+  value = azurerm_kubernetes_cluster.aks_cluster.kube_config.0.client_key
+  sensitive = true
 }
 
 output "cluster_ca_certificate" {
-  value = azurerm_kubernetes_cluster.this.kube_config.0.cluster_ca_certificate
+  value = azurerm_kubernetes_cluster.aks_cluster.kube_config.0.cluster_ca_certificate
+  sensitive = true
 }
 
 output "name" {
@@ -51,6 +54,7 @@ output "private_fqdn" {
 
 output "node_resource_group" {
   value       = azurerm_kubernetes_cluster.aks_cluster.node_resource_group
-  description = "Specifies the resource id of the auto-generated Resource Group which contains the resources for this Managed Kubernetes Cluster."
+  description = "Specifies the resource id of the auto-generated Resource Group which contains the resources for aks_cluster Managed Kubernetes Cluster."
 
 }
+
