@@ -1,0 +1,12 @@
+configs:
+  cm:
+    oidc.config: |
+      name: AzureAD
+      issuer: https://login.microsoftonline.com/<TENANT-ID>/v2.0
+      clientID: <CLIENT-ID>
+      clientSecret: $oidc.azure.clientSecret
+      requestedScopes: ["openid", "profile", "email", "groups"]
+
+server:
+  extraArgs:
+    - --insecure
