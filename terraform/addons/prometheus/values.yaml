@@ -1,0 +1,11 @@
+prometheus:
+  prometheusSpec:
+    replicas: 2
+    retention: 10d
+
+alertmanager:
+  alertmanagerSpec:
+    replicas: 1
+
+grafana:
+  enabled: false   # disable grafana here if you want standalone deployment
