@@ -10,7 +10,7 @@ spec:
   tls:
   - hosts:
     - mern.<your-domain>.com
-    secretName: mern-tls
+    secretName: letsencrypt-prod
   rules:
   - host: mern.<your-domain>.com
     http:
