@@ -6,9 +6,9 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: 'https://github.com/your-org/your-app-repo'
+    repoURL: 'https://github.com/devops-success-true/5.Private-AKS-cluster-Terraform'
     targetRevision: main
-    path: manifests
+    path: k8s/apps/mern
   destination:
     server: https://kubernetes.default.svc
     namespace: default
