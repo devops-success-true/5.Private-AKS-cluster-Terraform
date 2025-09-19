@@ -22,7 +22,7 @@ spec:
             name: mern-frontend-service
             port:
               number: 80
-      - path: /api
+      - path: /api   # if I also want external clients to be able to hit your backend (e.g. mobile apps, external API consumers).
         pathType: Prefix
         backend:
           service:
