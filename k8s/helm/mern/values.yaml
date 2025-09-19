@@ -1,0 +1,42 @@
+frontend:
+  image: kastriot2022/mern-frontend
+  tag: "sha-PLACEHOLDER"   # replaced by CI pipeline
+  replicaCount: 2
+  service:
+    type: ClusterIP
+    port: 80
+  envFromConfigMap: frontend-config   # reference ConfigMap for envs
+
+backend:
+  image: kastriot2022/mern-backend
+  tag: "sha-PLACEHOLDER"   # replaced by CI pipeline
+  replicaCount: 2
+  service:
+    type: ClusterIP
+    port: 5000
+  envFromSecret: mongo-secret
+  secretValues:
+    mongo-uri: "mongodb+srv://user:password@cluster.mongodb.net/mydb?retryWrites=true&w=majority"
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: mern.your-domain.com
+      paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            serviceName: mern-frontend-service
+            servicePort: 80
+        - path: /api
+          pathType: Prefix
+          backend:
+            serviceName: mern-backend-service
+            servicePort: 5000
+  tls:
+    - secretName: letsencrypt-prod
+      hosts:
+        - mern.your-domain.com
