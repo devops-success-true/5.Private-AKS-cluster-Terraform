@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-config
+  namespace: mern
+data:
+  REACT_APP_API_URL: "http://mern-backend-service.mern.svc.cluster.local:5000/api"
