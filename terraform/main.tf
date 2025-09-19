@@ -413,3 +413,34 @@ module "blob_private_endpoint" {
   private_dns_zone_group_name    = "BlobPrivateDnsZoneGroup"
   private_dns_zone_group_ids     = [module.blob_private_dns_zone.id]
 }
+
+# ArgoCD addon
+module "argocd" {
+  source     = "./addons/argocd"
+  depends_on = [module.aks_cluster]
+}
+
+# Grafana addon
+module "grafana" {
+  source     = "./addons/grafana"
+  depends_on = [module.aks_cluster]
+}
+
+# Prometheus addon
+module "prometheus" {
+  source     = "./addons/prometheus"
+  depends_on = [module.aks_cluster]
+}
+
+# Cert-Manager addon
+module "cert_manager" {
+  source     = "./addons/cert-manager"
+  depends_on = [module.aks_cluster]
+}
+
+# Ingress-NGINX addon
+module "ingress_nginx" {
+  source     = "./addons/ingress"
+  depends_on = [module.aks_cluster]
+}
+
