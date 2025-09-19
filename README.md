@@ -21,12 +21,12 @@ products:
 - azure-log-analytics
 - azure-virtual-machines
 - azure-devops
-name: Create a private Azure Kubernetes Service cluster using Terraform and Azure DevOps
-description: This sample shows how to create a private AKS cluster using Terraform and Azure DevOps in a hub and spoke network topology with Azure Firewall.
+name: Create a private Azure Kubernetes Service cluster using Terraform and Github Actions
+description: This sample shows how to create a private AKS cluster using Terraform and Github Actions in a hub and spoke network topology with Azure Firewall.
 urlFragment: private-aks-cluster-terraform-devops
 ---
 
-# Create a private Azure Kubernetes Service cluster using Terraform and Azure DevOps #
+# Create a private Azure Kubernetes Service cluster using Terraform and Github Actions #
 
 This sample shows how to create a [private AKS clusters](https://docs.microsoft.com/en-us/azure/aks/private-clusters) using:
 
@@ -429,3 +429,4 @@ If you open an ssh session to the Linux virtual machine via Azure Bastion and ma
 ![Architecture](images/nslookup.png)
 
 **NOTE**: the Terraform module runs an [Azure Custom Script Extension](https://docs.microsoft.com/en-us/azure/virtual-machines/extensions/custom-script-linux) that installed the [kubectl](https://kubernetes.io/docs/reference/kubectl/overview/) and [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/) on the jumpbox virtual machine.
+
