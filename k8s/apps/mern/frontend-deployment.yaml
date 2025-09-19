@@ -17,4 +17,7 @@ spec:
       - name: frontend
         image: kastriot2022/mern-frontend:latest
         ports:
-        - containerPort: 3000
+        - containerPort: 80
+        envFrom:
+        - configMapRef:
+            name: frontend-config
