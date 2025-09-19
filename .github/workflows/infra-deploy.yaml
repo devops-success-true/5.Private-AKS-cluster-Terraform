@@ -24,7 +24,7 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v3
 
-      # 🔑 Login to Azure using OIDC (no client secret required)
+      # Login to Azure using OIDC (no client secret required)
       - name: Azure Login
         uses: azure/login@v1
         with:
