@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mern-frontend
+  namespace: mern
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: mern-frontend
+  template:
+    metadata:
+      labels:
+        app: mern-frontend
+    spec:
+      containers:
+      - name: frontend
+        image: kastriot2022/mern-frontend:latest
+        ports:
+        - containerPort: 3000
