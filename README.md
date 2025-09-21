@@ -1,30 +1,4 @@
----
-page_type: sample
-languages:
-- azurecli
-- bash
-- javascript
-- terraform
-- csharp
-products:
-- azure
-- azure-firewall
-- azure-kubernetes-service
-- azure-container-registry
-- azure-storage
-- azure-blob-storage
-- azure-storage-accounts
-- azure-bastion
-- azure-private-link
-- azure-virtual-network
-- azure-key-vault
-- azure-log-analytics
-- azure-virtual-machines
-- azure-devops
-name: Create a private Azure Kubernetes Service cluster using Terraform and Github Actions
-description: This sample shows how to create a private AKS cluster using Terraform and Github Actions in a hub and spoke network topology with Azure Firewall.
-urlFragment: private-aks-cluster-terraform-devops
----
+
 
 # Create a private Azure Kubernetes Service cluster using Terraform and Github Actions #
 
@@ -259,211 +233,183 @@ Terraform state is stored remotely in an Azure Storage Account, configured as a 
 
 ## Azure Resources ##
 
-The following picture shows the resources deployed by the ARM template in the target resource group using one of the Azure DevOps pipelines in this reporitory.
+The following picture shows the resources deployed by the ARM template in the target resource group using one of the Github Actions pipelines in this reporitory.
 
 ![Resource Group](images/resourcegroup.png)
 
-The following picture shows the resources deployed by the ARM template in the MC resource group associated to the AKS cluster:
+The following picture shows the resources deployed by the ARM template in the resource group associated to the AKS cluster:
 
 ![MC Resource Group](images/mc_resourcegroup.png)
 
-## Use Azure Firewall in front of the Public Standard Load Balancer of the AKS cluster ##
+## Azure Firewall in front of the Public Standard Load Balancer of the AKS cluster ##
 
-Resource definitions in the Terraform modules make use of the [lifecycle](https://www.terraform.io/docs/language/meta-arguments/lifecycle.html) meta-argument to customize the actions when Azure resources are changed outside of Terraform control. The [ignore_changes](https://www.terraform.io/docs/language/meta-arguments/lifecycle.html#ignore_changes) argument is used to instruct Terraform to ignore updates to given resource properties such as tags. The Azure Firewall Policy resource definition contains a lifecycle block to prevent Terraform from fixing the resource when a rule collection or a single rule gets created, updated, or deleted. Likewise, the Azure Route Table contains a lifecycle block to prevent Terraform from fixing the resource when a user-defined route gets created, deleted, or updated. This allows to manage the DNAT, Application, and Network rules of an Azure Firewall Policy and the user-defined routes of an Azure Route Table outside of Terraform control.
+In this setup, the AKS cluster is deployed in **private mode**, and inbound/outbound traffic is routed through **Azure Firewall**.  
 
-The [cd-redmine-via-helm](./pipelines/cd-redmine-via-helm.yml) pipeline shows how you can deploy a workload to a private AKS cluster using an [Azure DevOps Pipelines](https://docs.microsoft.com/en-us/azure/devops/pipelines/get-started/what-is-azure-pipelines?view=azure-devops) that runs on a [Self-hosted Agent](https://docs.microsoft.com/en-us/azure/devops/pipelines/agents/agents?tabs=browser). The sample deploys the Bitnami [redmine](https://artifacthub.io/packages/helm/bitnami/redmine) project management web application using a public [Helm](https://helm.sh/) chart. The following diagram shows the network topology of the sample:
+Terraform modules use the [`lifecycle.ignore_changes`](https://developer.hashicorp.com/terraform/language/meta-arguments/lifecycle#ignore_changes) argument for Firewall Policies and Route Tables to avoid Terraform overwriting rule changes made operationally (for example, DNAT or UDR updates).
 
 ![Public Standard Load Balancer](images/firewall-public-load-balancer.png)
 
-The message flow can be described as follows:
+### Message Flow
 
-1. A request for the AKS-hosted web application is sent to a public IP exposed by the Azure Firewall via a public IP configuration. Both the public IP and public IP configuration are dedicated to this workload.
-2. An [Azure Firewall DNAT rule](https://docs.microsoft.com/en-us/azure/firewall/tutorial-firewall-dnat) is used to to translate the Azure Firewall public IP address and port to the public IP and port used by the workload in the `kubernetes` public Standard Load Balancer of the AKS cluster in the node resource group.
-3. The request is sent by the load balancer to one of the Kubernetes service pods running on one of the agent nodes of the AKS cluster.
-4. The response message is sent back to the original caller via a user-defined with the Azure Firewall public IP as address prefix and Internet as next hope type.
-5. Any workload-initiated outbound call is routed to the private IP address of the Azure Firewall by the default user-defined route with `0.0.0.0/0` as address prefix and virtual appliance as next hope type.
+1. A request for the AKS-hosted application arrives at a **public IP exposed by Azure Firewall**.  
+2. An **Azure Firewall DNAT rule** translates this public IP/port to the internal IP/port of the **AKS Standard Load Balancer**.  
+3. The AKS Load Balancer forwards the request to the correct Kubernetes Service (e.g., frontend or backend), which sends it to the corresponding pods.  
+4. Responses travel back through the Azure Firewall using **User Defined Routes (UDRs)**.  
+5. Outbound calls from workloads are also routed through the Firewall by default (`0.0.0.0/0` UDR → Virtual Appliance = Firewall private IP).  
 
-The [cd-redmine-via-helm](./pipelines/cd-redmine-via-helm.yml) pipeline performs the following steps:
+### GitHub Actions + ArgoCD workflow
 
-- The [Helm Installer](https://docs.microsoft.com/en-us/azure/devops/pipelines/tasks/tool/helm-installer?view=azure-devops) task installs [Helm](https://helm.sh/) on the [Self-hosted Agent](https://docs.microsoft.com/en-us/azure/devops/pipelines/agents/agents?tabs=browser): this step is not necessary if [Helm](https://helm.sh/) is already installed on the agent
-- The [Kubectl Installer](https://docs.microsoft.com/en-us/azure/devops/pipelines/tasks/tool/kubectl-installer?view=azure-devops) taks installs [kubectl](https://kubectl.docs.kubernetes.io/guides/introduction/kubectl/) on the self-hosted agent: even this step is not necessary if [kubectl](https://kubectl.docs.kubernetes.io/guides/introduction/kubectl/) is already installed on the agent
-- Uses the [Azure CLI](https://docs.microsoft.com/en-us/azure/devops/pipelines/tasks/deploy/azure-cli?view=azure-devops) task to run the following steps:
-  - Gets the AKS cluster credentials using the [az aks get-credentials](https://docs.microsoft.com/en-us/cli/azure/aks?view=azure-cli-latest#az_aks_get_credentials) command
-  - Uses the [Helm](https://helm.sh/) CLI to add the repo for the Bitnami [redmine](https://artifacthub.io/packages/helm/bitnami/redmine) project management web application
-  - Uses [Helm](https://helm.sh/) CLI to check if the Helm chart is already deployed:
-    - If yes, it upgrades the current release.
-    - If not, it installs a new release.
-  - Uses [kubectl](https://kubectl.docs.kubernetes.io/guides/introduction/kubectl/) to retrieve the Public IP of the redmine service.
-  - Uses the [az network public-ip show](https://docs.microsoft.com/en-us/cli/azure/network/public-ip?view=azure-cli-latest#az_network_public_ip_show) to check if an Azure Public IP resource called `AksName_HelmReleaseNamespace_ServiceName` already exists in a give resource group.
-    - If yes, it retrieves its public IP address.
-    - If not, it creates a new Azure Public IP resource using the [az network public-ip create](https://docs.microsoft.com/en-us/cli/azure/network/public-ip?view=azure-cli-latest#az_network_public_ip_create) and retrieves its public IP address.
-  - Uses the [az network firewall ip-config show](https://docs.microsoft.com/en-us/cli/azure/network/firewall/ip-config?view=azure-cli-latest#az_network_firewall_ip_config_show) command to check if an Azure Firewall IP configuration named `AksName_HelmReleaseNamespace_ServiceName` already exists. If not, it creates a new Azure Firewall IP configuration using the [az network firewall ip-config create](https://docs.microsoft.com/en-us/cli/azure/network/firewall/ip-config?view=azure-cli-latest#az_network_firewall_ip_config_create) command.
-  - Uses the [az network firewall policy rule-collection-group collection list](https://docs.microsoft.com/en-us/cli/azure/network/firewall/policy/rule-collection-group/collection?view=azure-cli-latest#az_network_firewall_policy_rule_collection_group_collection_list) command to check if a DNAT rule collection named `DnatRules` already exists in the Azure Firewall Policy. If not, it creates a new a DNAT rule collection named `DnatRules` under the `DefaultDnatRuleCollectionGroup` rule collection group using the [az network firewall policy rule-collection-group collection add-filter-collection](https://docs.microsoft.com/en-us/cli/azure/network/firewall/policy/rule-collection-group/collection?view=azure-cli-latest#az_network_firewall_policy_rule_collection_group_collection_add_filter_collection) command.
-  - Uses the [az network firewall policy rule-collection-group collection rule add](https://docs.microsoft.com/en-us/cli/azure/network/firewall/policy/rule-collection-group/collection/rule?view=azure-cli-latest#az_network_firewall_policy_rule_collection_group_collection_rule_add) command to add a DNAT rule to the Azure Firewall Policy that maps the port 80 of the `AksName_HelmReleaseNamespace_ServiceName` public IP address used by the `AksName_HelmReleaseNamespace_ServiceName` Azure Firewall IP configuration to the port 80 of the public IP address exposed by the redmine service on the Standard Load Balancer of the private AKS cluster (in a production environment you should use port 443 and HTTPS transport protocol instead of port 80 and unsecure HTTP transport protocol).
-  - Uses the [az network route-table route show](https://docs.microsoft.com/en-us/cli/azure/network/route-table/route?view=azure-cli-latest#az_network_route_table_route_show) command to check if a user-defined route called exists in the Azure Route Table associated to the subnets hosting the node pools of the AKS cluster. If not, it creates a new user-defined route using the [az network route-table route create](https://docs.microsoft.com/en-us/cli/azure/network/route-table/route?view=azure-cli-latest#az_network_route_table_route_create) command thats routes the traffic from the public IP address named `AksName_HelmReleaseNamespace_ServiceName` directly to internet. This route is more specific than the user-defined route with CIDR `0.0.0.0/0` that routes the traffic from the subnets hosting AKS node pools to the private IP address of the Azure Firewall. This user-defined rule allows to properly send back response messages to the public IP address of the Azure Firewall Ip configuration used to expose the redmine Kubernetes service.
-  - Uses the [az network dns record-set a list](https://docs.microsoft.com/en-us/cli/azure/network/dns/record-set/a?view=azure-cli-latest#az_network_dns_record_set_a_list) command to check if an A record exists with the given subdomain for the AKS-hosted web application. If not, the pipeline uses the [az network dns record-set a add-record](https://docs.microsoft.com/en-us/cli/azure/network/dns/record-set/a?view=azure-cli-latest#az_network_dns_record_set_a_add_record) command to an A record for the resolution of the service hostname to the public IP address of the Azure Firewall public IP.
+This project does use:
 
-Likewise, the [destroy-redmine-via-helm](./pipelines/destroy-redmine-via-helm.yml) pipeline shows how you can undeploy a workload to a private AKS cluster using an [Azure DevOps Pipelines](https://docs.microsoft.com/en-us/azure/devops/pipelines/get-started/what-is-azure-pipelines?view=azure-devops) that runs on a [Self-hosted Agent](https://docs.microsoft.com/en-us/azure/devops/pipelines/agents/agents?tabs=browser). The pipeline performs the following steps:
+- **GitHub Actions** provisions infrastructure (Terraform) and deploys required addons (Ingress, Cert-Manager, Prometheus, Grafana, ArgoCD, etc.).  
+- Application CI/CD runs in a **separate repository**. Docker images are built and pushed to Docker Hub, and Helm `values.yaml` in this repo is updated with new image tags.  
+- **ArgoCD**, running in the AKS cluster, continuously monitors this repo and syncs changes. Whenever image tags or manifests are updated, workloads in AKS are reconciled automatically.
 
-- The [Helm Installer](https://docs.microsoft.com/en-us/azure/devops/pipelines/tasks/tool/helm-installer?view=azure-devops) task installs [Helm](https://helm.sh/) on the [Self-hosted Agent](https://docs.microsoft.com/en-us/azure/devops/pipelines/agents/agents?tabs=browser): this step is not necessary if [Helm](https://helm.sh/) is already installed on the agent
-- The [Kubectl Installer](https://docs.microsoft.com/en-us/azure/devops/pipelines/tasks/tool/kubectl-installer?view=azure-devops) taks installs [kubectl](https://kubectl.docs.kubernetes.io/guides/introduction/kubectl/) on the self-hosted agent: even this step is not necessary if [kubectl](https://kubectl.docs.kubernetes.io/guides/introduction/kubectl/) is already installed on the agent
-- Uses the [Azure CLI](https://docs.microsoft.com/en-us/azure/devops/pipelines/tasks/deploy/azure-cli?view=azure-devops) task to run the following steps:
-  - Gets the AKS cluster credentials using the [az aks get-credentials](https://docs.microsoft.com/en-us/cli/azure/aks?view=azure-cli-latest#az_aks_get_credentials) command
-  - Uses [Helm](https://helm.sh/) CLI to uninstall the redmine release.
-  - Uses [kubectl](https://kubectl.docs.kubernetes.io/guides/introduction/kubectl/) to delete the Kubernetes namespace used by the release.
-  - Uses the [az network firewall policy rule-collection-group collection rule remove](https://docs.microsoft.com/en-us/cli/azure/network/firewall/policy/rule-collection-group/collection/rule?view=azure-cli-latest#az_network_firewall_policy_rule_collection_group_collection_rule_remove) command to remove the DNAT rule called `AksName_HelmReleaseNamespace_ServiceName` from the `DnatRules` rule collection of the Azure Firewall Policy.
-
-  - Uses the [az network route-table route delete](https://docs.microsoft.com/en-us/cli/azure/network/route-table/route?view=azure-cli-latest#az_network_route_table_route_delete) command to delete the user-defined route called `AksName_HelmReleaseNamespace_ServiceName` from the Azure Route Table associated to the subnets hosting the node pools of the AKDS cluster.
-  - Uses the [az network firewall ip-config delete](https://docs.microsoft.com/en-us/cli/azure/network/firewall/ip-config?view=azure-cli-latest#az_network_firewall_ip_config_delete) command to delete the Azure Firewall IP configuration called `AksName_HelmReleaseNamespace_ServiceName` used to expose the redmine Kubernetes service.
-  - Uses the [az network public-ip delete](https://docs.microsoft.com/en-us/cli/azure/network/public-ip?view=azure-cli-latest#az_network_public_ip_delete) command to destroy the Azure Public IP called `AksName_HelmReleaseNamespace_ServiceName` used to expose the redmine Kubernetes service.
+This GitOps approach replaces the need for DevOps agents running inside the VNet. Firewall and routing still protect and control access, while GitHub Actions + ArgoCD manage deployments securely and continuously.
 
 ## API Gateway ##
 
-In a production environment where Azure Firewall is used to inspect, protect, and filter inbound internet traffic with [Azure Firewall DNAT rules](https://docs.microsoft.com/en-us/azure/firewall/tutorial-firewall-dnat) and [Threat intelligence-based filtering](https://docs.microsoft.com/en-us/azure/firewall/threat-intel), it's a good practice to use an API Gateway to expose web applications and REST APIs to the public internet.
+In production, our AKS cluster is private and sits behind **Azure Firewall** for traffic inspection and outbound control. While the firewall handles DNAT, UDRs, and threat-intelligence filtering, it is a best practice to also use an **API Gateway** or **Ingress Controller** to securely expose web applications and REST APIs.
 
-![Public Standard Load Balancer](images/api-gateway.png)
+![API Gateway](images/api-gateway.png)
 
-Without an API gateway, client apps should send requests directly to the Kubernetes-hosted microservices and this would raises the following problems:
+### Why use an API Gateway?
+Without an API Gateway, client applications would connect directly to Kubernetes services. This creates several issues:
 
-- **Coupling**: client application are coupled to internal microservices. Refactoring internal microservices can cause breaking changes to the client apps. Introducing a level of indirection via an API Gateway between client apps and a SaaS application allows you to start breaking down the monolith and gradually replace subsystems  with microservices without violating the contract with client apps.
-- **Chattiness**: if a single page/screen needs to retrieve data from multiple microservices, this can result into multiple calls to fine-grained microservices
-- **Security issues**:  without an API Gateway, all the microservices are directly exposed to the public internet making the attack surface larger.
-- **Cross-cutting concerns**: Each publicly exposed microservice must implement concerns such as authentication, authorization, SSL termination, client rate limiting, response caching, etc.
+- **Coupling**: client applications depend directly on internal microservices. Refactoring or restructuring services risks breaking clients. An API Gateway introduces an abstraction layer.  
+- **Chattiness**: retrieving data from multiple microservices often means many client requests. A gateway can aggregate these.  
+- **Security**: exposing all services directly increases the attack surface. A gateway centralizes ingress, SSL termination, and authentication.  
+- **Cross-cutting concerns**: features like rate limiting, caching, JWT validation, and logging are handled once at the gateway, not duplicated across services.
 
-When running applications on AKS, you can use one of the following API Gateways:
+### Options for AKS
 
-- **Reverse Proxy Server**: [Nginx](https://www.nginx.com/), [HAProxy](https://www.haproxy.com/), and [Traefik](https://traefik.io/) are popular reverse proxy servers that support features such as load balancing, SSL termination, and layer 7 routing. They can run on dedicated virtual machines or as ingress controllers on a Kubernetes cluster.
-- **Service Mesh Ingress Controller**: If you are using a service mesh such as [Open Service Mesh](https://openservicemesh.io/), [Linkerd](https://linkerd.io/), and [Istio](https://istio.io/), consider the features that are provided by the ingress controller for that service mesh. For example, the Istio ingress controller supports layer 7 routing, HTTP redirects, retries, and other features.
-- **Azure Application Gateway**: [Azure Application Gateway](https://docs.microsoft.com/en-us/azure/application-gateway/overview) is a regional, fully-managed load balancing service that can perform layer-7 routing and SSL termination. It also provides a Web Access Firewall and an [ingress controller](https://docs.microsoft.com/en-us/azure/application-gateway/ingress-controller-overview) for Kubernetes. For more information, see [Use Application Gateway Ingress Controller (AGIC) with a multi-tenant Azure Kubernetes Service](https://docs.microsoft.com/en-us/azure/architecture/example-scenario/aks-agic/aks-agic).
-- **Azure Front Door**:  [Azure Front Door](https://docs.microsoft.com/en-us/azure/frontdoor/front-door-overview) is a global layer 7 load balancer that uses the Microsoft global edge network to create fast, secure, and widely scalable web applications. It supports features such as SSL termination, response caching, WAF at the edge, URL-based routing, rewrite and redirections, it support multiple routing methods such as priority routing and latency-based routing.
-- **Azure API Management**: [API Management](https://docs.microsoft.com/en-us/azure/api-management/api-management-key-concepts) is a turnkey solution for publishing APIs to both external and internal customers. It provides features that are useful for managing a public-facing API, including rate limiting, IP restrictions, and authentication and authorization using Microsoft Entra ID or other identity providers.
+In this repo, the following approaches are relevant:
 
-## Use Azure Firewall in front of an internal Standard Load Balancer ##
+- **Ingress Controller (most common)**  
+  We deploy [NGINX Ingress Controller](https://kubernetes.github.io/ingress-nginx/) with **Cert-Manager** for TLS. This is the simplest and most common way to route traffic to workloads inside AKS.  
 
-In this scenario, an ASP.NET Core application is hosted as a service by an Azure Kubernetes Service cluster and fronted by an [NGINX ingress controller](https://kubernetes.github.io/ingress-nginx/). The application code is available under the [source](./source) folder, while the Helm chart is available in the [chart](./chart) folder. The [NGINX ingress controller](https://kubernetes.github.io/ingress-nginx/) is exposed via an internal load balancer with a private  IP address in the spoke virtual network that hosts the AKS cluster. For more information, see [Create an ingress controller to an internal virtual network in Azure Kubernetes Service (AKS)](https://docs.microsoft.com/en-us/azure/aks/ingress-internal-ip). When you deploy an NGINX ingress controller or more in general a `LoadBalancer` or `ClusterIP` service with the `service.beta.kubernetes.io/azure-load-balancer-internal: "true"` annotation in the metadata section, an internal standard load balancer called `kubernetes-internal` gets created under the node resource group. For more information, see [Use an internal load balancer with Azure Kubernetes Service (AKS)](https://docs.microsoft.com/en-us/azure/aks/internal-lb). As shown in the picture below, the test web application is exposed via the Azure Firewall using a dedicated Azure public IP.  
+- **Azure Application Gateway (AGIC)**  
+  For enterprises needing WAF, SSL offload, or direct Azure integration, you can use [Application Gateway Ingress Controller (AGIC)](https://learn.microsoft.com/azure/application-gateway/ingress-controller-overview).  
 
-![Internal Standard Load Balancer](images/firewall-internal-load-balacer.png)
+- **Azure Front Door (global edge)**  
+  If you need global scale, edge routing, or multi-region AKS, [Azure Front Door](https://learn.microsoft.com/azure/frontdoor/front-door-overview) can front AKS and route traffic to the private cluster via Firewall.  
 
-The message flow can be described as follows:
+- **Azure API Management (full API lifecycle)**  
+  For managing public APIs with features like subscriptions, throttling, IP allowlists, and Entra ID authentication, [Azure API Management](https://learn.microsoft.com/azure/api-management/api-management-key-concepts) is often placed in front of AKS ingress.  
 
-1. A request for the AKS-hosted test web application is sent to a public IP exposed by the Azure Firewall via a public IP configuration. Both the public IP and public IP configuration are dedicated to this workload.
-2. An [Azure Firewall DNAT rule](https://docs.microsoft.com/en-us/azure/firewall/tutorial-firewall-dnat) is used to to translate the Azure Firewall public IP address and port to the private IP address and port used by the NGINX ingress conroller in the internal Standard Load Balancer of the AKS cluster in the node resource group.
-3. The request is sent by the internal load balancer to one of the Kubernetes service pods running on one of the agent nodes of the AKS cluster.
-4. The response message is sent back to the original caller via a user-defined with `0.0.0.0/0` as address prefix and virtual appliance as next hope type.
-5. Any workload-initiated outbound call is routed to the private IP address of the user-defined route.
+- **Service Mesh Gateways (optional)**  
+  If you deploy a service mesh (e.g., Istio, Linkerd, Open Service Mesh), the mesh ingress controller can act as your API Gateway with additional routing, retries, and observability.
 
-The [ci-test-web-app](./pipelines/ci-test-web-app.yml) pipeline performs the following steps:
+---
 
-- Uses the [az acr login](https://docs.microsoft.com/en-us/cli/azure/acr?view=azure-cli-latest#az_acr_login) command to login to Azure Container Registry through the Docker CLI.
-- Uses `docker build` and `docker push` commands to build and publish the container image to Azure Container Registry.
-- Uses `helm registry login` to login to Azure Container Registry via Helm
-- Uses `helm push` command to push the Helm chart as an [Open Container Initiative (OCI)](https://opencontainers.org/) artifact.
+👉 **In this repo**, we focus on the **NGINX Ingress Controller + Cert-Manager** setup as the default API Gateway. For enterprise cases, Azure Application Gateway or API Management can be introduced on top of this architecture.
 
-The [cd-test-web-app](./pipelines/cd-test-web-app.yml) pipeline performs the following steps:
+## Use Azure Firewall in front of an Internal Standard Load Balancer ##
 
-- The [Helm Installer](https://docs.microsoft.com/en-us/azure/devops/pipelines/tasks/tool/helm-installer?view=azure-devops) task installs [Helm](https://helm.sh/) on the [Self-hosted Agent](https://docs.microsoft.com/en-us/azure/devops/pipelines/agents/agents?tabs=browser): this step is not necessary if [Helm](https://helm.sh/) is already installed on the agent
-- The [Kubectl Installer](https://docs.microsoft.com/en-us/azure/devops/pipelines/tasks/tool/kubectl-installer?view=azure-devops) taks installs [kubectl](https://kubectl.docs.kubernetes.io/guides/introduction/kubectl/) on the self-hosted agent: even this step is not necessary if [kubectl](https://kubectl.docs.kubernetes.io/guides/introduction/kubectl/) is already installed on the agent
-- Uses the [Azure CLI](https://docs.microsoft.com/en-us/azure/devops/pipelines/tasks/deploy/azure-cli?view=azure-devops) task to run the following steps:
-  - Gets the AKS cluster credentials using the [az aks get-credentials](https://docs.microsoft.com/en-us/cli/azure/aks?view=azure-cli-latest#az_aks_get_credentials) command
-  - Uses the [Helm](https://helm.sh/) CLI to add the repo for the Bitnami [redmine](https://artifacthub.io/packages/helm/bitnami/redmine) project management web application
-  - Uses [Helm](https://helm.sh/) CLI to check if the Helm chart is already deployed:
-    - If yes, it upgrades the current release.
-    - If not, it installs a new release.
-  - Deploys the [cert-manager](https://cert-manager.io/docs/) via Helm chart. Cert-manager adds certificates and certificate issuers as resource types in Kubernetes clusters, and simplifies the process of obtaining, renewing and using those certificates. In this sample, cert-manager issues a certificate from [Let's Encrypt](https://letsencrypt.org/) used by the NGINX ingress controller for SSL termination.
-  - Deploys the [NGINX ingress controller](https://kubernetes.github.io/ingress-nginx/) via Helm chart. The [NGINX ingress controller](https://kubernetes.github.io/ingress-nginx/) is exposed via an internal load balancer with a private IP address in the spoke virtual network that hosts the AKS cluster. For more information, see [Create an ingress controller to an internal virtual network in Azure Kubernetes Service (AKS)](https://docs.microsoft.com/en-us/azure/aks/ingress-internal-ip). When you deploy an NGINX ingress controller or more in general a `LoadBalancer` or `ClusterIP` service with the `service.beta.kubernetes.io/azure-load-balancer-internal: "true"` annotation in the metadata section, an internal standard load balancer called `kubernetes-internal` gets created under the node resource group. For more information, see [Use an internal load balancer with Azure Kubernetes Service (AKS)](https://docs.microsoft.com/en-us/azure/aks/internal-lb).
-  - Uses [kubectl](https://kubectl.docs.kubernetes.io/guides/introduction/kubectl/) to retrieve the external, private IP of the NGINX ingress controller.
-  - Uses the [az network public-ip show](https://docs.microsoft.com/en-us/cli/azure/network/public-ip?view=azure-cli-latest#az_network_public_ip_show) to check if an Azure Public IP resource called `AksName_HelmReleaseNamespace_ServiceName` already exists in a give resource group.
-    - If yes, it retrieves its public IP address.
-    - If not, it creates a new Azure Public IP resource using the [az network public-ip create](https://docs.microsoft.com/en-us/cli/azure/network/public-ip?view=azure-cli-latest#az_network_public_ip_create) and retrieves its public IP address.
-  - Uses the [az network firewall ip-config show](https://docs.microsoft.com/en-us/cli/azure/network/firewall/ip-config?view=azure-cli-latest#az_network_firewall_ip_config_show) command to check if an Azure Firewall IP configuration named `AksName_HelmReleaseNamespace_ServiceName` already exists. If not, it creates a new Azure Firewall IP configuration using the [az network firewall ip-config create](https://docs.microsoft.com/en-us/cli/azure/network/firewall/ip-config?view=azure-cli-latest#az_network_firewall_ip_config_create) command.
-  - Uses the [az network firewall policy rule-collection-group collection list](https://docs.microsoft.com/en-us/cli/azure/network/firewall/policy/rule-collection-group/collection?view=azure-cli-latest#az_network_firewall_policy_rule_collection_group_collection_list) command to check if a DNAT rule collection named `DnatRules` already exists in the Azure Firewall Policy. If not, it creates a new a DNAT rule collection named `DnatRules` under the `DefaultDnatRuleCollectionGroup` rule collection group using the [az network firewall policy rule-collection-group collection add-filter-collection](https://docs.microsoft.com/en-us/cli/azure/network/firewall/policy/rule-collection-group/collection?view=azure-cli-latest#az_network_firewall_policy_rule_collection_group_collection_add_filter_collection) command.
-  - Uses the [az network firewall policy rule-collection-group collection rule add](https://docs.microsoft.com/en-us/cli/azure/network/firewall/policy/rule-collection-group/collection/rule?view=azure-cli-latest#az_network_firewall_policy_rule_collection_group_collection_rule_add) command to add a DNAT rule to the Azure Firewall Policy that maps the port 80 of the `AksName_HelmReleaseNamespace_ServiceName` public IP address used by the `AksName_HelmReleaseNamespace_ServiceName` Azure Firewall IP configuration to the port 80 of the private IP address exposed by the NGINX ingress controller on the Internal Load Balancer of the private AKS cluster. This rule is necessary to let Let's Encrypt to check that your are the owner of the domain specified in the ingress of your service when the cert-manager issues a certificate for SSL termination.
-  - Uses the [az network firewall policy rule-collection-group collection rule add](https://docs.microsoft.com/en-us/cli/azure/network/firewall/policy/rule-collection-group/collection/rule?view=azure-cli-latest#az_network_firewall_policy_rule_collection_group_collection_rule_add) command to add a DNAT rule to the Azure Firewall Policy that maps the port 443 of the `AksName_HelmReleaseNamespace_ServiceName` public IP address used by the `AksName_HelmReleaseNamespace_ServiceName` Azure Firewall IP configuration to the port 443 of the private IP address exposed by the NGINX ingress controller on the Internal Load Balancer of the private AKS cluster. This rule is used to translate and send incoming requests to the NGINX ingress controller.
-  - Uses the [az network dns record-set a list](https://docs.microsoft.com/en-us/cli/azure/network/dns/record-set/a?view=azure-cli-latest#az_network_dns_record_set_a_list) command to check if an A record exists with the given subdomain for the AKS-hosted web application. If not, the pipeline uses the [az network dns record-set a add-record](https://docs.microsoft.com/en-us/cli/azure/network/dns/record-set/a?view=azure-cli-latest#az_network_dns_record_set_a_add_record) command to an A record for the resolution of the service hostname to the public IP address of the Azure Firewall public IP.
+In this repo, the AKS cluster is deployed as **private-only**, and traffic flows through **Azure Firewall**. Applications are exposed using an [NGINX ingress controller](https://kubernetes.github.io/ingress-nginx/) deployed via Terraform.  
+The ingress controller is fronted by an **internal Standard Load Balancer** with a private IP in the AKS virtual network.  
+
+For more info on how this works in AKS, see [Internal Load Balancer for AKS](https://learn.microsoft.com/azure/aks/internal-lb).  
+When you deploy an NGINX ingress controller (or any `LoadBalancer` service) with the annotation:
+
+```yaml
+service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+``` 
 
 ## Considerations ##
 
-In a production environment, the endpoints publicly exposed by Kubernetes services running in a private AKS cluster should be exposed using an ingress controller such as [NGINX Ingress Controller](https://docs.nginx.com/nginx-ingress-controller/) or [Application Gateway Ingress Controller](https://docs.microsoft.com/en-us/azure/application-gateway/ingress-controller-overview) that provides advanced functionalities such as path based routing, load balancing, SSL termination, and web access firewall. For more information, see the following articles:
+In a production environment with a **private AKS cluster**, applications should not be directly exposed via `LoadBalancer` services. Instead, use an **ingress controller** such as [NGINX Ingress Controller](https://kubernetes.github.io/ingress-nginx/) fronted by **Azure Firewall** (with DNAT rules) or by an **Application Gateway** if advanced L7 capabilities are needed.  
 
-### Azure Kubernetes Service ###
+This repo follows the **NGINX Ingress + cert-manager + Azure Firewall** approach, which provides:  
+- Path-based and host-based routing  
+- Load balancing across pods  
+- SSL termination with automated certificate management via Let’s Encrypt  
+- Centralized ingress, keeping backend services (`ClusterIP`) private  
+- Reduced attack surface, since apps are only reachable via firewall public IP  
 
-- [Create a private Azure Kubernetes Service cluster](https://github.com/paolosalvatori/private-aks-cluster)
-- [Best practices for multitenancy and cluster isolation](https://docs.microsoft.com/en-us/azure/aks/operator-best-practices-cluster-isolation)
-- [Best practices for basic scheduler features in Azure Kubernetes Service (AKS)](https://docs.microsoft.com/en-us/azure/aks/operator-best-practices-scheduler)
-- [Best practices for advanced scheduler features](https://docs.microsoft.com/en-us/azure/aks/operator-best-practices-advanced-scheduler)
-- [Best practices for authentication and authorization](https://docs.microsoft.com/en-us/azure/aks/operator-best-practices-advanced-scheduler)
-- [Best practices for cluster security and upgrades in Azure Kubernetes Service (AKS)](https://docs.microsoft.com/en-us/azure/aks/operator-best-practices-cluster-security)
-- [Best practices for container image management and security in Azure Kubernetes Service (AKS)](https://docs.microsoft.com/en-us/azure/aks/operator-best-practices-container-image-management)
-- [Best practices for network connectivity and security in Azure Kubernetes Service (AKS)](https://docs.microsoft.com/en-us/azure/aks/operator-best-practices-network)
-- [Best practices for storage and backups in Azure Kubernetes Service (AKS)](https://docs.microsoft.com/en-us/azure/aks/operator-best-practices-storage)
-- [Best practices for business continuity and disaster recovery in Azure Kubernetes Service (AKS)](https://docs.microsoft.com/en-us/azure/aks/operator-best-practices-multi-region)
-- [Azure Kubernetes Services (AKS) day-2 operations guide](https://docs.microsoft.com/en-us/azure/architecture/operator-guides/aks/day-2-operations-guide)
+### AKS Best Practices
+Some recommended resources for running production workloads on AKS:  
 
-### Azure Application Gateway ###
+- [Create a private AKS cluster](https://learn.microsoft.com/azure/aks/private-clusters)  
+- [Cluster isolation & multitenancy best practices](https://learn.microsoft.com/azure/aks/operator-best-practices-cluster-isolation)  
+- [Scheduler best practices](https://learn.microsoft.com/azure/aks/operator-best-practices-scheduler)  
+- [Authentication and authorization](https://learn.microsoft.com/azure/aks/operator-best-practices-identity)  
+- [Cluster security and upgrade strategy](https://learn.microsoft.com/azure/aks/operator-best-practices-cluster-security)  
+- [Image management & security](https://learn.microsoft.com/azure/aks/operator-best-practices-container-image-management)  
+- [Network and connectivity security](https://learn.microsoft.com/azure/aks/operator-best-practices-network)  
+- [Storage and backup](https://learn.microsoft.com/azure/aks/operator-best-practices-storage)  
+- [Business continuity & DR](https://learn.microsoft.com/azure/aks/operator-best-practices-multi-region)  
+- [Day-2 Operations for AKS](https://learn.microsoft.com/azure/architecture/operator-guides/aks/day-2-operations-guide)  
 
-- [How an Application Gateway works](https://docs.microsoft.com/en-us/azure/application-gateway/how-application-gateway-works)
+### Ingress Controller Options
+While this repo uses **NGINX ingress controller**, other common ingress solutions in AKS include:  
+- [Azure Application Gateway Ingress Controller (AGIC)](https://learn.microsoft.com/azure/application-gateway/ingress-controller-overview) – fully managed Azure L7 load balancer + WAF  
+- [Azure Front Door](https://learn.microsoft.com/azure/frontdoor/front-door-overview) – global load balancing & CDN edge security  
+- [Azure API Management](https://learn.microsoft.com/azure/api-management/api-management-key-concepts) – full-featured API gateway  
 
-### Azure Application Gateway Ingress Controller ###
+The choice depends on your requirements:  
+- Use **NGINX ingress + Firewall** → simple, cost-effective, Kubernetes-native.  
+- Use **AGIC** → tighter Azure integration with WAF and advanced L7 rules.  
+- Use **Front Door** → multi-region, edge acceleration, global presence.  
+- Use **APIM** → for external APIs requiring subscriptions, rate limiting, and identity integration.
 
-- [Use Application Gateway Ingress Controller (AGIC) with a multi-tenant Azure Kubernetes Service (AKS)](https://docs.microsoft.com/en-us/azure/architecture/example-scenario/aks-agic/aks-agic)
-- [What is Application Gateway Ingress Controller?](https://docs.microsoft.com/en-us/azure/application-gateway/ingress-controller-overview)
-- [Documentation for Application Gateway Ingress Controller](https://azure.github.io/application-gateway-kubernetes-ingress/)
-- [Annotations for Application Gateway Ingress Controller](https://docs.microsoft.com/en-us/azure/application-gateway/ingress-controller-annotations)
-- [Certificate issuance with LetsEncrypt.org](https://azure.github.io/application-gateway-kubernetes-ingress/how-tos/lets-encrypt/)
-- [Tutorial: Enable the Ingress Controller add-on (preview) for a new AKS cluster with a new Application Gateway instance](https://docs.microsoft.com/en-us/azure/application-gateway/tutorial-ingress-controller-add-on-new)
-- [Tutorial: Enable Application Gateway Ingress Controller add-on for an existing AKS cluster with an existing Application Gateway through Azure CLI (Preview)](https://docs.microsoft.com/en-us/azure/application-gateway/tutorial-ingress-controller-add-on-existing)
-- [Difference between Helm deployment and AKS Add-On](https://docs.microsoft.com/en-us/azure/application-gateway/ingress-controller-overview#difference-between-helm-deployment-and-aks-add-on)
+This way it:
+✅ Removes Azure DevOps pipeline references.
+✅ Reframes to your GitHub Actions + Terraform + ArgoCD setup.
+✅ Keeps NGINX ingress as the default (since that’s what your repo has).
+✅ Mentions alternatives (AGIC, Front Door, APIM) in case someone reading your repo wants more.
+
+Do you want me to also draw a short table comparing NGINX ingress vs AGIC vs Front Door vs APIM in terms of cost, complexity, and features (like WAF, SSL, routing)? That would make the README really strong for recruiters/interviewers.
 
 ### NGINX Ingress Controller ###
 
-- [NGINX Ingress Controller documentation](https://docs.nginx.com/nginx-ingress-controller/)
-- [Enabling ModSecurity in the Kubernetes NGINX Ingress Controller](https://awkwardferny.medium.com/enabling-modsecurity-in-the-kubernetes-ingress-nginx-controller-111f9c877998)
-- [Create an HTTPS ingress controller on Azure Kubernetes Service (AKS)](https://docs.microsoft.com/en-us/azure/aks/ingress-tls)
-- [Create an NGINX ingress controller that uses an internal, private network and IP address](https://docs.microsoft.com/en-us/azure/aks/ingress-internal-ip)
-- [Create an NGINX ingress controller that uses your own TLS certificates](https://docs.microsoft.com/en-us/azure/aks/ingress-own-tls)
-- [Create an ingress controller that uses Let's Encrypt to automatically generate TLS certificates with a static public IP address](https://docs.microsoft.com/en-us/azure/aks/ingress-static-ip)
+When exposing workloads from the private AKS cluster, this repo uses the [NGINX Ingress Controller](https://kubernetes.github.io/ingress-nginx/) with **cert-manager** for TLS certificates.  
+Some useful resources:  
 
-### Azure Application Gateway WAF ###
+- [NGINX Ingress Controller documentation](https://kubernetes.github.io/ingress-nginx/)  
+- [Enable ModSecurity with NGINX ingress](https://kubernetes.github.io/ingress-nginx/user-guide/nginx-configuration/annotations/#modsecurity)  
+- [Create an HTTPS ingress controller on AKS](https://learn.microsoft.com/azure/aks/ingress-tls)  
+- [Use NGINX ingress with an internal/private IP](https://learn.microsoft.com/azure/aks/ingress-internal-ip)  
+- [Use custom TLS certificates with NGINX ingress](https://learn.microsoft.com/azure/aks/ingress-own-tls)  
+- [Automated TLS with cert-manager + Let’s Encrypt](https://cert-manager.io/docs/tutorials/acme/nginx-ingress/)  
 
-- [What is Azure Web Application Firewall on Azure Application Gateway?](https://docs.microsoft.com/en-us/azure/web-application-firewall/ag/ag-overview)
-- [Web Application Firewall CRS rule groups and rules](https://docs.microsoft.com/en-us/azure/web-application-firewall/ag/application-gateway-crs-rulegroups-rules?tabs=owasp31)
-- [Custom rules for Web Application Firewall v2 on Azure Application Gateway](https://docs.microsoft.com/en-us/azure/web-application-firewall/ag/custom-waf-rules-overview)
-- [Quickstart: Create an Azure WAF v2 on Application Gateway using an ARM template](https://docs.microsoft.com/en-us/azure/web-application-firewall/ag/quick-create-template)
-- [Microsoft.Network/ApplicationGatewayWebApplicationFirewallPolicies Resource Type](https://docs.microsoft.com/en-us/azure/templates/microsoft.network/applicationgatewaywebapplicationfirewallpolicies)
-- [Create and use Web Application Firewall v2 custom rules on Application Gateway](https://docs.microsoft.com/en-us/azure/web-application-firewall/ag/create-custom-waf-rules)
-- [az network application-gateway waf-policy Azure CLI commands](/cli/azure/network/application-gateway/waf-policy?view=azure-cli-latest)
-- [Enable Web Application Firewall using the Azure CLI](https://docs.microsoft.com/en-us/azure/web-application-firewall/ag/tutorial-restrict-web-traffic-cli)
-- [Configure per-site WAF policies using Azure PowerShell](https://docs.microsoft.com/en-us/azure/web-application-firewall/ag/per-site-policies)
-- [Create Web Application Firewall policies for Application Gateway](https://docs.microsoft.com/en-us/azure/web-application-firewall/ag/create-waf-policy-ag#migrate-to-waf-policy)
+---
 
-## Related resources ##
+### Azure Application Gateway WAF (Optional) ###
 
-### Architectural guidance ###
+While this repo defaults to **NGINX ingress + Firewall**, some production setups prefer **Azure Application Gateway with Web Application Firewall (WAF)** as the ingress layer.  
 
-- [Azure Kubernetes Service (AKS) solution journey](https://docs.microsoft.com/en-us/azure/architecture/reference-architectures/containers/aks-start-here)
-- [AKS cluster best practices](https://docs.microsoft.com/en-us/azure/aks/best-practices?toc=https%3A%2F%2Fdocs.microsoft.com%2Fen-us%2Fazure%2Farchitecture%2Ftoc.json&bc=https%3A%2F%2Fdocs.microsoft.com%2Fen-us%2Fazure%2Farchitecture%2Fbread%2Ftoc.json)
-- [Azure Kubernetes Services (AKS) day-2 operations guide](https://docs.microsoft.com/en-us/azure/architecture/operator-guides/aks/day-2-operations-guide)
-- [Choosing a Kubernetes at the edge compute option](https://docs.microsoft.com/en-us/azure/architecture/operator-guides/aks/choose-kubernetes-edge-compute-option)
+Useful references if you want to integrate AGIC instead:  
 
-### Reference architectures ###
+- [Azure WAF on Application Gateway overview](https://learn.microsoft.com/azure/web-application-firewall/ag/ag-overview)  
+- [Custom WAF rules for Application Gateway](https://learn.microsoft.com/azure/web-application-firewall/ag/custom-waf-rules-overview)  
+- [Quickstart: Create an Azure WAF v2 on Application Gateway](https://learn.microsoft.com/azure/web-application-firewall/ag/quick-create-template)  
+- [Application Gateway Ingress Controller (AGIC)](https://learn.microsoft.com/azure/application-gateway/ingress-controller-overview)  
 
-- [Baseline architecture for an Azure Kubernetes Service (AKS) cluster](https://docs.microsoft.com/en-us/azure/architecture/reference-architectures/containers/aks/secure-baseline-aks)
-- [Microservices architecture on Azure Kubernetes Service (AKS)](https://docs.microsoft.com/en-us/azure/architecture/reference-architectures/containers/aks-microservices/aks-microservices)
-- [Advanced Azure Kubernetes Service (AKS) microservices architecture](https://docs.microsoft.com/en-us/azure/architecture/reference-architectures/containers/aks-microservices/aks-microservices-advanced)
-- [CI/CD pipeline for container-based workloads](https://docs.microsoft.com/en-us/azure/architecture/example-scenario/apps/devops-with-aks)
-- [Building a telehealth system on Azure](https://docs.microsoft.com/en-us/azure/architecture/example-scenario/apps/telehealth-system)
+---
 
-## Visio ##
+## Related Resources ##
 
-In the [visio](./visio) folder you can find the Visio document which contains the above diagrams.
+### AKS Guidance ###
+- [AKS secure baseline architecture](https://learn.microsoft.com/azure/architecture/reference-architectures/containers/aks/secure-baseline-aks)  
+- [AKS cluster best practices](https://learn.microsoft.com/azure/aks/best-practices)  
+- [AKS day-2 operations guide](https://learn.microsoft.com/azure/architecture/operator-guides/aks/day-2-operations-guide)  
 
-## Test access to your private AKS cluster ##
+### Microservices & CI/CD ###
+- [Microservices architecture on AKS](https://learn.microsoft.com/azure/architecture/reference-architectures/containers/aks-microservices/aks-microservices)  
+- [CI/CD pipelines for AKS apps](https://learn.microsoft.com/azure/architecture/example-scenario/apps/devops-with-aks)  
 
-If you open an ssh session to the Linux virtual machine via Azure Bastion and manually run the [nslookup](http://manpages.ubuntu.com/manpages/bionic/man1/nslookup.1.html) command using the fully-qualified name (FQDN) of the API server as a parameter, you should see an output like the the following:
+---
 
-![Architecture](images/nslookup.png)
+## Test Access to Private AKS Cluster ##
 
-**NOTE**: the Terraform module runs an [Azure Custom Script Extension](https://docs.microsoft.com/en-us/azure/virtual-machines/extensions/custom-script-linux) that installed the [kubectl](https://kubernetes.io/docs/reference/kubectl/overview/) and [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/) on the jumpbox virtual machine.
+To validate private connectivity:  
+- Use **Azure Bastion** to open an SSH session to the jumpbox VM.  
+- Run `nslookup` against the AKS API server FQDN. You should see resolution through the **Private DNS Zone**.  
+
+![nslookup](images/nslookup.png)  
+
+**Note**: The Terraform module installs **kubectl** and **Azure CLI** on the jumpbox VM using the [Custom Script Extension](https://learn.microsoft.com/azure/virtual-machines/extensions/custom-script-linux). This lets you manage the AKS cluster directly from the VM.
 
 
 
