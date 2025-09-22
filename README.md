@@ -147,6 +147,19 @@ To follow best practices:
      }
    }
 
+Replace tfstateaccount, tfstate, and infrastructure.tfstate with your actual names. To clarify, I initially created manually this storage account before running Github Actions pipeline. 
+
+Then my OIDC federated identity (enterprise app in AAD) needs Contributor or Storage Blob Data Contributor role assignments at least on the storage account (or RG level), the OIDC- Storage Account access.
+
+Run once:
+```bash
+# Allow my GitHub OIDC identity to write state into the storage account tfstateaccount
+az role assignment create \
+  --assignee <OIDC_CLIENT_ID_OR_OBJECT_ID> \
+  --role "Storage Blob Data Contributor" \
+  --scope /subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-terraform-backend/providers/Microsoft.Storage/storageAccounts/tfstateaccount
+``` 
+
 The [Azure Provider](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs) or **azurerm** can be used to configure infrastructure in Microsoft Azure using the Azure Resource Manager API's. Terraform provides a [backend](https://www.terraform.io/docs/language/settings/backends/azurerm.html) for the Azure Provider that allows to store the state as a Blob with the given Key within a given Blob Container inside a Blob Storage Account. This backend also supports state locking and consistency checking via native capabilities of the Azure Blob Storage. [](https://www.terraform.io/docs/language/settings/backends/azurerm.html) When using Github Actions to deploy services to a cloud environment, you should use this backend to store the state to a remote storage account. For more information on how to create to use a storage account to store remote Terraform state, state locking, and encryption at rest, see [Store Terraform state in Azure Storage](https://docs.microsoft.com/en-us/azure/developer/terraform/store-state-in-azure-storage?tabs=azure-cli). Under the [storage-account](./storage-account) folder in this sample, you can find a Terraform module and bash script to deploy an Azure storage account where you can persist the Terraform state as a blob.
 
 ## GitHub Actions Runners for Private AKS Clusters
@@ -233,6 +246,114 @@ The infra workflow includes the standard Terraform commands:
 Terraform state is stored remotely in an Azure Storage Account, configured as a Terraform backend.
 
 ---
+
+# Examples of Usage / Deployment
+
+After setting up the infrastructure and add-ons for the AKS cluster via the GitHub Actions pipeline with Terraform, the next step is to deploy the application and additional cluster resources.
+This repository includes both Helm-based deployments (for the MERN application) and raw Kubernetes manifests (for cluster add-ons and integrations).
+
+Below are example commands for deploying each component.  
+
+---
+
+## 1. Deploy MERN App (Helm)
+
+The MERN application is packaged as a Helm chart under `helm/mern`.
+
+```bash
+# Navigate to the chart directory
+cd helm/mern
+
+# Install the MERN app (replace <release-name> and <namespace> as needed)
+helm install <release-name> . -n <namespace> --create-namespace
+
+# Example:
+helm install mern-app . -n mern --create-namespace
+
+# Upgrade after making changes
+helm upgrade mern-app . -n mern
+```
+
+---
+
+## 2. Deploy ArgoCD
+
+Manifests are under `k8s/argocd`.
+
+```bash
+kubectl apply -f k8s/argocd/ -n argocd --create-namespace
+```
+
+---
+
+## 3. Deploy Cert-Manager + ClusterIssuer
+
+Manifests are under `k8s/cert-manager`.
+
+```bash
+kubectl apply -f k8s/cert-manager/ -n cert-manager --create-namespace
+```
+
+---
+
+## 4. Deploy Ingress Rules
+
+Manifests are under `k8s/ingress`.
+
+```bash
+kubectl apply -f k8s/ingress/ -n mern
+```
+
+---
+
+## 5. Deploy Monitoring (Prometheus, Grafana, Loki, etc.)
+
+Manifests are under `k8s/monitoring`.
+
+```bash
+kubectl apply -f k8s/monitoring/ -n monitoring --create-namespace
+```
+
+---
+
+## 6. Deploy Storage Account CSI Resources
+
+Manifests are under `k8s/storage-account`.
+
+```bash
+kubectl apply -f k8s/storage-account/ -n mern
+```
+
+---
+
+## Notes
+
+- All commands assume I already configured access to my **private AKS cluster** (via Bastion/jumpbox or a self-hosted GitHub runner).  
+- Adjust namespaces if needed (`mern`, `argocd`, `cert-manager`, `monitoring`).  
+- For Helm charts, prefer `helm upgrade --install` for idempotent deployments:
+
+```bash
+helm upgrade --install mern-app . -n mern --create-namespace
+```
+
+---
+
+## Cleanup
+
+To remove resources when no longer needed:
+
+```bash
+# Uninstall MERN Helm release
+helm uninstall mern-app -n mern
+
+# Delete Kubernetes manifests
+kubectl delete -f k8s/argocd/ -n argocd
+kubectl delete -f k8s/cert-manager/ -n cert-manager
+kubectl delete -f k8s/ingress/ -n mern
+kubectl delete -f k8s/monitoring/ -n monitoring
+kubectl delete -f k8s/storage-account/ -n mern
+```
+
 
 ## Azure Firewall in front of the Internal Standard Load Balancer of the AKS cluster ##
 
@@ -379,6 +500,7 @@ It brings together the most useful practices into a single repository that:
 - Deploys **Helm-based addons** (Ingress, Cert-Manager, Prometheus, Grafana, ArgoCD).  
 - Implements a **GitOps workflow** with ArgoCD.  
 - Ensures **best-practice networking and security** with Azure Firewall and private endpoints.  
+
 
 
 
