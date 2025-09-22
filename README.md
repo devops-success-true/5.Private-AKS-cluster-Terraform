@@ -331,10 +331,7 @@ kubectl apply -f k8s/storage-account/ -n mern
 - All commands assume I already configured access to my **private AKS cluster** (via Bastion/jumpbox or a self-hosted GitHub runner).  
 - Adjust namespaces if needed (`mern`, `argocd`, `cert-manager`, `monitoring`).  
 - For Helm charts, prefer `helm upgrade --install` for idempotent deployments:
-
-```bash
-helm upgrade --install mern-app . -n mern --create-namespace
-```
+- The YAML manifests under `k8s/storage/` (StorageClasses and PVCs) are **not applied in this repository**, since they are not referenced in the `helm/mern` deployments. They are included here only as examples of configuration, to demonstrate how persistent storage could be defined if required. In future repositories that focus specifically on **Kubernetes application management and orchestration features**, these storage resources (StorageClasses, PVCs, etc.) will be fully implemented and referenced by the workloads.
 
 ---
 
@@ -500,6 +497,7 @@ It brings together the most useful practices into a single repository that:
 - Deploys **Helm-based addons** (Ingress, Cert-Manager, Prometheus, Grafana, ArgoCD).  
 - Implements a **GitOps workflow** with ArgoCD.  
 - Ensures **best-practice networking and security** with Azure Firewall and private endpoints.  
+
 
 
 
