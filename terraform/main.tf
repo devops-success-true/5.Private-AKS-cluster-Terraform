@@ -7,26 +7,26 @@ terraform {
   }
 
   required_version = ">= 0.14.9"
+
+  backend "azurerm" {
+    resource_group_name   = "rg-terraform-backend"    # your RG name
+    storage_account_name  = "tfstateaccount"      # your existing storage account
+    container_name        = "tfstate"                   # your blob container
+    key                   = "infrastructure.tfstate" # state file name
+  }
 }
 
 provider "azurerm" {
   features {}
 }
 
-# Commented out: Remote backend (we’ll use local state instead)
-# terraform {
-#   backend "azurerm" {
-#   }
-# }
-
 locals {
-  storage_account_prefix = "boot"
+  storage_account_prefix = "tfstateaccount"
   route_table_name       = "DefaultRouteTable"
   route_name             = "RouteToAzureFirewall"
 }
 
 data "azurerm_client_config" "current" {}
-
 
 resource "azurerm_resource_group" "rg" {
   name     = var.resource_group_name
