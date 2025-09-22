@@ -17,18 +17,15 @@ In a private AKS cluster, the API server endpoint is not exposed via a public IP
 
 Creating a virtual machine in the same virtual network as the AKS cluster or in a peered virtual network is the easiest option. Express Route and VPNs add costs and require additional networking complexity. Virtual network peering requires you to plan your network CIDR ranges to ensure there are no overlapping ranges. For more information, see [Create a private Azure Kubernetes Service cluster](https://docs.microsoft.com/en-us/azure/aks/private-clusters). For more information on Azure Private Links, see [What is Azure Private Link?](https://docs.microsoft.com/en-us/azure/private-link/private-link-overview)
 
-In addition, the sample creates a private endpoint to access all the managed services deployed by the Terraform modules via a private IP address: 
+In addition, this repo creates private endpoints to access all the managed services deployed by the Terraform modules via their private IP addresses: 
 
 - Azure Container Registry
 - Azure Storage Account
 - Azure Key Vault
 
-> **NOTE**  
-> If you want to deploy a [private AKS cluster using a public DNS zone](https://docs.microsoft.com/en-us/azure/aks/private-clusters#create-a-private-aks-cluster-with-a-public-dns-address) to simplify the DNS resolution of the API Server to the private IP address of the private endpoint,  you can use this project under my [GitHub](https://github.com/paolosalvatori/private-cluster-with-public-dns-zone) account or on [Azure Quickstart Templates](https://github.com/Azure/azure-quickstart-templates/tree/master/demos/private-aks-cluster-with-public-dns-zone).
-
 ## Architecture ##
 
-The following picture shows the high-level architecture created by the Terraform modules included in this sample:
+The following picture shows the high-level architecture created by the Terraform modules included in this repo:
 
 ![Architecture](images/normalized-architecture.png)
 
@@ -52,24 +49,30 @@ The architecture is composed of the following elements:
 - An Azure Firewall used to control the egress traffic from the private AKS cluster. For more information on how to lock down your private AKS cluster and filter outbound traffic, see: 
   - [Control egress traffic for cluster nodes in Azure Kubernetes Service (AKS)](https://docs.microsoft.com/en-us/azure/aks/limit-egress-traffic)
   - [Use Azure Firewall to protect Azure Kubernetes Service (AKS) Deployments](https://docs.microsoft.com/en-us/azure/firewall/protect-azure-kubernetes-service)
-- An AKS cluster with a private endpoint to the API server hosted by an AKS-managed Azure subscription. The cluster can communicate with the API server exposed via a Private Link Service using a private endpoint.
-- An Azure Bastion resource that provides secure and seamless SSH connectivity to the Vm virtual machine directly in the Azure portal over SSL
+- An AKS cluster with a private endpoint to the API server. The cluster can communicate with the API server exposed via a Private Link Service using a private endpoint.
+- An Azure Bastion resource that provides secure and seamless SSH connectivity to the VM virtual machine directly in the Azure portal over SSL.
 - An Azure Container Registry (ACR) to build, store, and manage container images and artifacts in a private registry for all types of container deployments.
 - When the ACR SKU is equal to Premium, a Private Endpoint is created to allow the private AKS cluster to access ACR via a private IP address. For more information, see [Connect privately to an Azure container registry using Azure Private Link](https://docs.microsoft.com/en-us/azure/container-registry/container-registry-private-link).
-- A jumpbox virtual machine used to manage the Azure Kubernetes Service cluster
+- A jumpbox virtual machine used to manage the Azure Kubernetes Cluster.
 - A Private DNS Zone for the name resolution of each private endpoint.
-- A Virtual Network Link between each Private DNS Zone and both the hub and spoke virtual networks
+- A Virtual Network Link between each Private DNS Zone and both the hub and spoke virtual networks.
 - A Log Analytics workspace to collect the diagnostics logs and metrics of both the AKS cluster and Vm virtual machine.
+- Monitoring Add-ons (Helm) – Prometheus and Grafana are deployed via Helm for metrics collection, alerting, and visualization.
+- Security Add-ons (Helm) – cert-manager and certificate issuers are deployed to automate TLS certificate provisioning and renewal for Kubernetes workloads.
+- Continuous Delivery (Helm) – Argo CD is deployed for GitOps-based application delivery, continuously reconciling the cluster state with this repository.
+- Ingress (Helm) – NGINX Ingress Controller is deployed via Helm to securely expose cluster applications with path-based routing and SSL termination.
+- kubectl-applied Resources – certain add-on components and CRDs are deployed using kubectl apply when Helm is not suitable (e.g., custom manifests, RBAC).
+- Application Workloads (Helm) – workloads are packaged as Helm charts and templates for deployments, services, ConfigMaps, Secrets, and ingress rules. Values are managed via values.yaml for environment-specific configuration.
 
 ## Limitations ##
 
 A private AKS cluster has the following limitations:
 
-- IP authorized ranges can't be applied to the private api server endpoint, they only apply to the public API server
-- [Azure Private Link service limitations](https://docs.microsoft.com/en-us/azure/private-link/private-link-service-overview#limitations) apply to private AKS clusters.
-- For customers that need to enable Azure Container Registry to work with private AKS cluster, the Container Registry virtual network must be peered with the agent cluster virtual network.
-- No support for converting existing AKS clusters into private clusters
-- Deleting or modifying the private endpoint in the customer subnet will cause the cluster to stop functioning.
+- No IP allowlisting → API server IP ranges apply only to public endpoints, not private ones.
+- Azure Private Link constraints → Standard Private Link limitations apply.
+- ACR integration → If you use ACR with private endpoints, the registry VNet must be accessible (via peering or same VNet).
+- No conversion → You cannot convert an existing public AKS cluster into a private cluster.
+- Private endpoint dependency → Deleting or modifying the AKS private endpoint breaks API connectivity.
 
 ## Requirements
 
@@ -154,7 +157,7 @@ Since this project uses **GitHub Actions** (instead of Azure DevOps), we rely on
 >
 > - Using an **Azure Bastion / Jumpbox VM** inside the same VNet (already provisioned in this repo) to run `kubectl` commands.
 > - Setting up a **self-hosted GitHub Actions runner** inside your VNet or in a peered VNet, so it has private network access to AKS.
-> - Using ArgoCD (already part of and used in this repo) to manage workloads, so your CI/CD pipelines don’t need direct `kubectl` connectivity.
+> - Using ArgoCD (already part of this repo) to manage workloads, so your CI/CD pipelines don’t need direct `kubectl` connectivity.
 
 In most cases, the **best practice** is:
 - Keep infrastructure deployments (Terraform, AKS, add-ons) in GitHub Actions with OIDC + AzureRM provider.
@@ -410,6 +413,7 @@ To validate private connectivity:
 ![nslookup](images/nslookup.png)  
 
 **Note**: The Terraform module installs **kubectl** and **Azure CLI** on the jumpbox VM using the [Custom Script Extension](https://learn.microsoft.com/azure/virtual-machines/extensions/custom-script-linux). This lets you manage the AKS cluster directly from the VM.
+
 
 
 
