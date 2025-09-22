@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-frontend-static
+  namespace: mern
+spec:
+  accessModes:
+    - ReadWriteMany   # Multiple pods can access
+  storageClassName: azurefile-premium
+  resources:
+    requests:
+      storage: 5Gi
