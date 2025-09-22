@@ -234,29 +234,24 @@ Terraform state is stored remotely in an Azure Storage Account, configured as a 
 
 ---
 
-## Azure Resources ##
+## Azure Firewall in front of the Internal Standard Load Balancer of the AKS cluster ##
 
-The following picture shows the resources deployed by the ARM template in the target resource group using one of the Github Actions pipelines in this reporitory.
+In this setup, the AKS cluster is deployed in **private mode**, and inbound/outbound traffic is routed through **Azure Firewall**. Applications are exposed using an [NGINX ingress controller](https://kubernetes.github.io/ingress-nginx/) deployed via Terraform.  
+The ingress controller is fronted by an **internal Standard Load Balancer** with a private IP in the AKS virtual network.  
 
-![Resource Group](images/resourcegroup.png)
+For more info on how this works in AKS, see [Internal Load Balancer for AKS](https://learn.microsoft.com/azure/aks/internal-lb).  
 
-The following picture shows the resources deployed by the ARM template in the resource group associated to the AKS cluster:
-
-![MC Resource Group](images/mc_resourcegroup.png)
-
-## Azure Firewall in front of the Public Standard Load Balancer of the AKS cluster ##
-
-In this setup, the AKS cluster is deployed in **private mode**, and inbound/outbound traffic is routed through **Azure Firewall**.  
+When you deploy an NGINX ingress controller or more in general a `LoadBalancer` or `ClusterIP` service with the `service.beta.kubernetes.io/azure-load-balancer-internal: "true"` annotation in the metadata section, an internal standard load balancer called `kubernetes-internal` gets created under the node resource group. For more information, see [Use an internal load balancer with Azure Kubernetes Service (AKS)](https://docs.microsoft.com/en-us/azure/aks/internal-lb).
 
 Terraform modules use the [`lifecycle.ignore_changes`](https://developer.hashicorp.com/terraform/language/meta-arguments/lifecycle#ignore_changes) argument for Firewall Policies and Route Tables to avoid Terraform overwriting rule changes made operationally (for example, DNAT or UDR updates).
 
-![Public Standard Load Balancer](images/firewall-public-load-balancer.png)
+![Internal Standard Load Balancer](images/firewall-internal-load-balacer.png)
 
 ### Message Flow
 
 1. A request for the AKS-hosted application arrives at a **public IP exposed by Azure Firewall**.  
 2. An **Azure Firewall DNAT rule** translates this public IP/port to the internal IP/port of the **AKS Standard Load Balancer**.  
-3. The AKS Load Balancer forwards the request to the correct Kubernetes Service (e.g., frontend or backend), which sends it to the corresponding pods.  
+3. The AKS Internal Standard Load Balancer forwards the request to the NGINX Ingress Controller service. The Ingress Controller applies routing rules and sends traffic to the correct Kubernetes Service (frontend or backend), which then routes it to the pods.  
 4. Responses travel back through the Azure Firewall using **User Defined Routes (UDRs)**.  
 5. Outbound calls from workloads are also routed through the Firewall by default (`0.0.0.0/0` UDR → Virtual Appliance = Firewall private IP).  
 
@@ -307,17 +302,6 @@ In this repo, the following approaches are relevant:
 
 👉 **In this repo**, we focus on the **NGINX Ingress Controller + Cert-Manager** setup as the default API Gateway. For enterprise cases, Azure Application Gateway or API Management can be introduced on top of this architecture.
 
-## Use Azure Firewall in front of an Internal Standard Load Balancer ##
-
-In this repo, the AKS cluster is deployed as **private-only**, and traffic flows through **Azure Firewall**. Applications are exposed using an [NGINX ingress controller](https://kubernetes.github.io/ingress-nginx/) deployed via Terraform.  
-The ingress controller is fronted by an **internal Standard Load Balancer** with a private IP in the AKS virtual network.  
-
-For more info on how this works in AKS, see [Internal Load Balancer for AKS](https://learn.microsoft.com/azure/aks/internal-lb).  
-When you deploy an NGINX ingress controller (or any `LoadBalancer` service) with the annotation:
-
-```yaml
-service.beta.kubernetes.io/azure-load-balancer-internal: "true"
-``` 
 
 ## Considerations ##
 
@@ -330,19 +314,6 @@ This repo follows the **NGINX Ingress + cert-manager + Azure Firewall** approach
 - Centralized ingress, keeping backend services (`ClusterIP`) private  
 - Reduced attack surface, since apps are only reachable via firewall public IP  
 
-### AKS Best Practices
-Some recommended resources for running production workloads on AKS:  
-
-- [Create a private AKS cluster](https://learn.microsoft.com/azure/aks/private-clusters)  
-- [Cluster isolation & multitenancy best practices](https://learn.microsoft.com/azure/aks/operator-best-practices-cluster-isolation)  
-- [Scheduler best practices](https://learn.microsoft.com/azure/aks/operator-best-practices-scheduler)  
-- [Authentication and authorization](https://learn.microsoft.com/azure/aks/operator-best-practices-identity)  
-- [Cluster security and upgrade strategy](https://learn.microsoft.com/azure/aks/operator-best-practices-cluster-security)  
-- [Image management & security](https://learn.microsoft.com/azure/aks/operator-best-practices-container-image-management)  
-- [Network and connectivity security](https://learn.microsoft.com/azure/aks/operator-best-practices-network)  
-- [Storage and backup](https://learn.microsoft.com/azure/aks/operator-best-practices-storage)  
-- [Business continuity & DR](https://learn.microsoft.com/azure/aks/operator-best-practices-multi-region)  
-- [Day-2 Operations for AKS](https://learn.microsoft.com/azure/architecture/operator-guides/aks/day-2-operations-guide)  
 
 ### Ingress Controller Options
 While this repo uses **NGINX ingress controller**, other common ingress solutions in AKS include:  
@@ -355,14 +326,6 @@ The choice depends on your requirements:
 - Use **AGIC** → tighter Azure integration with WAF and advanced L7 rules.  
 - Use **Front Door** → multi-region, edge acceleration, global presence.  
 - Use **APIM** → for external APIs requiring subscriptions, rate limiting, and identity integration.
-
-This way it:
-✅ Removes Azure DevOps pipeline references.
-✅ Reframes to your GitHub Actions + Terraform + ArgoCD setup.
-✅ Keeps NGINX ingress as the default (since that’s what your repo has).
-✅ Mentions alternatives (AGIC, Front Door, APIM) in case someone reading your repo wants more.
-
-Do you want me to also draw a short table comparing NGINX ingress vs AGIC vs Front Door vs APIM in terms of cost, complexity, and features (like WAF, SSL, routing)? That would make the README really strong for recruiters/interviewers.
 
 ### NGINX Ingress Controller ###
 
@@ -378,32 +341,6 @@ Some useful resources:
 
 ---
 
-### Azure Application Gateway WAF (Optional) ###
-
-While this repo defaults to **NGINX ingress + Firewall**, some production setups prefer **Azure Application Gateway with Web Application Firewall (WAF)** as the ingress layer.  
-
-Useful references if you want to integrate AGIC instead:  
-
-- [Azure WAF on Application Gateway overview](https://learn.microsoft.com/azure/web-application-firewall/ag/ag-overview)  
-- [Custom WAF rules for Application Gateway](https://learn.microsoft.com/azure/web-application-firewall/ag/custom-waf-rules-overview)  
-- [Quickstart: Create an Azure WAF v2 on Application Gateway](https://learn.microsoft.com/azure/web-application-firewall/ag/quick-create-template)  
-- [Application Gateway Ingress Controller (AGIC)](https://learn.microsoft.com/azure/application-gateway/ingress-controller-overview)  
-
----
-
-## Related Resources ##
-
-### AKS Guidance ###
-- [AKS secure baseline architecture](https://learn.microsoft.com/azure/architecture/reference-architectures/containers/aks/secure-baseline-aks)  
-- [AKS cluster best practices](https://learn.microsoft.com/azure/aks/best-practices)  
-- [AKS day-2 operations guide](https://learn.microsoft.com/azure/architecture/operator-guides/aks/day-2-operations-guide)  
-
-### Microservices & CI/CD ###
-- [Microservices architecture on AKS](https://learn.microsoft.com/azure/architecture/reference-architectures/containers/aks-microservices/aks-microservices)  
-- [CI/CD pipelines for AKS apps](https://learn.microsoft.com/azure/architecture/example-scenario/apps/devops-with-aks)  
-
----
-
 ## Test Access to Private AKS Cluster ##
 
 To validate private connectivity:  
@@ -413,6 +350,37 @@ To validate private connectivity:
 ![nslookup](images/nslookup.png)  
 
 **Note**: The Terraform module installs **kubectl** and **Azure CLI** on the jumpbox VM using the [Custom Script Extension](https://learn.microsoft.com/azure/virtual-machines/extensions/custom-script-linux). This lets you manage the AKS cluster directly from the VM.
+
+---
+
+## References & Acknowledgements
+
+This repository has been designed and implemented by combining best practices and ideas from several advanced open-source projects.  
+Special thanks to the authors of the following repositories, whose work greatly influenced this implementation:
+
+- [paolosalvatori/private-aks-cluster-terraform-devops](https://github.com/paolosalvatori/private-aks-cluster-terraform-devops)  
+  Comprehensive Terraform-based setup for a private AKS cluster, including networking, firewall, and GitHub Actions integration.  
+
+- [paolosalvatori/aks-crossplane-terraform](https://github.com/paolosalvatori/aks-crossplane-terraform)  
+  Demonstrates hybrid IaC approaches combining Terraform and Crossplane for advanced AKS management.  
+
+- [markti/terraform-hashitalks-2024](https://github.com/markti/terraform-hashitalks-2024)  
+  Modern Terraform project structure and DevOps patterns shared during HashiTalks 2024.  
+
+- [antonputra/tutorials (Lesson 177)](https://github.com/antonputra/tutorials/tree/main/lessons/177)  
+  Step-by-step AKS cluster deployment with Terraform, including ingress, monitoring, and GitHub Actions integration.  
+
+---
+
+👉 While this project is inspired by the above, it is **not a direct copy**.  
+It brings together the most useful practices into a single repository that:  
+- Provisions a **private AKS cluster** with Terraform.  
+- Integrates **GitHub Actions + OIDC** for secure CI/CD.  
+- Deploys **Helm-based addons** (Ingress, Cert-Manager, Prometheus, Grafana, ArgoCD).  
+- Implements a **GitOps workflow** with ArgoCD.  
+- Ensures **best-practice networking and security** with Azure Firewall and private endpoints.  
+
+
 
 
 
