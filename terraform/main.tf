@@ -444,3 +444,13 @@ module "ingress_nginx" {
   depends_on = [module.aks_cluster]
 }
 
+module "aks_cluster" {
+  source = "./modules/aks"
+  # your AKS vars...
+}
+
+module "autoscaling" {
+  source = "./modules/autoscaling"
+  depends_on = [module.aks_cluster]
+}
+
