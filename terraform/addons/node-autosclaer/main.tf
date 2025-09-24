@@ -5,5 +5,5 @@ resource "helm_release" "metrics_server" {
   version    = "3.11.0"
   namespace  = "kube-system"
 
-  values = [file("${path.module}/addon/node-autoscaler/values.yaml")]
+  values = [file("${path.module}/values.yaml")]
 }
