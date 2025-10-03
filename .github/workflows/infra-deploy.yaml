@@ -1,16 +1,24 @@
 name: Infra Deploy
 
 on:
-  workflow_dispatch:   # Manual trigger
   push:
     branches:
-      - main           # Or staging, adjust to your infra branch
+      - main                # Auto-run on changes to main
+    paths:
+      - 'terraform/**'      # Only trigger if Terraform code changes
+      - 'tfvars/**'
+
+  pull_request:
+    branches:
+      - main                # Optional: run plan for PRs into main
     paths:
       - 'terraform/**'
       - 'tfvars/**'
 
-permissions:  # OIDC federation between GitHub Actions and Azure AD is now the best practice
-  id-token: write      # Required for OIDC login
+  workflow_dispatch:         # Manual trigger support
+
+permissions:
+  id-token: write            # For OIDC federation with Azure
   contents: read
 
 jobs:
@@ -24,33 +32,52 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v3
 
-      # Login to Azure using OIDC (no client secret required)
+      # Login to Azure using OIDC (best practice, no secrets)
       - name: Azure Login
         uses: azure/login@v1
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}       # Azure AD App registration (federated identity enabled)
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}       # Tenant ID
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }} # Subscription ID
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.3
 
-      - name: Terraform FMT
-        run: terraform fmt -check
+      # Cache Terraform plugins/modules for faster runs
+      - name: Cache Terraform
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.terraform.d/plugin-cache
+            .terraform
+          key: ${{ runner.os }}-terraform-${{ hashFiles('**/*.tf') }}
+          restore-keys: |
+            ${{ runner.os }}-terraform-
+
+      - name: Set environment variables
+        run: echo "TFVARS_FILE=../tfvars/prod/prod.tfvars" >> $GITHUB_ENV
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -diff
 
       - name: Terraform Validate
         run: terraform validate
 
       - name: Terraform Plan
-        run: terraform plan -out=tfplan
+        run: terraform plan -var-file=$TFVARS_FILE -out=tfplan
 
       - name: Upload plan for review
         uses: actions/upload-artifact@v4
         with:
           name: tfplan
-          path: tfplan
-      
-      # Optional: Only allow apply on approved branches (prod)
+          path: terraform/tfplan
+
+      # Only allow apply when on main branch
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main'
         run: terraform apply -auto-approve tfplan
