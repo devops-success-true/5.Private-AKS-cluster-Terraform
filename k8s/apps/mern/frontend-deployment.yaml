@@ -3,8 +3,11 @@ kind: Deployment
 metadata:
   name: mern-frontend
   namespace: mern
+  labels:
+    app: mern-frontend
 spec:
   replicas: 2
+  revisionHistoryLimit: 3
   selector:
     matchLabels:
       app: mern-frontend
@@ -14,10 +17,36 @@ spec:
         app: mern-frontend
     spec:
       containers:
-      - name: frontend
+      - name: nginx
         image: kastriot2022/mern-frontend:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 80
+          name: http
         envFrom:
         - configMapRef:
             name: frontend-config
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "200m"
+            memory: "256Mi"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 2
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3
+      restartPolicy: Always
