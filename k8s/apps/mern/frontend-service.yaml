@@ -3,10 +3,13 @@ kind: Service
 metadata:
   name: mern-frontend-service
   namespace: mern
+  labels:
+    app: mern-frontend
 spec:
   selector:
     app: mern-frontend
   ports:
     - port: 80
-      targetPort: 3000
+      targetPort: 80
+      protocol: TCP
   type: ClusterIP
