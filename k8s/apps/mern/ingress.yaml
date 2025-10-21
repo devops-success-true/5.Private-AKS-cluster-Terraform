@@ -6,13 +6,15 @@ metadata:
   annotations:
     kubernetes.io/ingress.class: nginx
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
   tls:
   - hosts:
-    - mern.<your-domain>.com
+    - mern.kastro.com
     secretName: letsencrypt-prod
   rules:
-  - host: mern.<your-domain>.com
+  - host: mern.kastro.com
     http:
       paths:
       - path: /
