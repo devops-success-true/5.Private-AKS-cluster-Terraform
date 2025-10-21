@@ -17,7 +17,7 @@ spec:
         app: mern-frontend
     spec:
       containers:
-      - name: mern-frontend
+      - name: mern-frontend 
         image: kastriot2022/mern-frontend:latest
         imagePullPolicy: Always
         ports:
