@@ -3,5 +3,8 @@ kind: ConfigMap
 metadata:
   name: frontend-config
   namespace: mern
+  labels:
+    app: mern-frontend
 data:
-  REACT_APP_API_URL: "http://mern-backend-service.mern.svc.cluster.local:5000/api"
+  # Base API URL — points to public ingress endpoint for React frontend
+  REACT_APP_API_URL: "https://mern.kastro.com/api" # tells the ingress where the backend service is
