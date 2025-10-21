@@ -3,8 +3,11 @@ kind: Deployment
 metadata:
   name: mern-backend
   namespace: mern
+  labels:
+    app: mern-backend
 spec:
   replicas: 2
+  revisionHistoryLimit: 3
   selector:
     matchLabels:
       app: mern-backend
@@ -16,11 +19,43 @@ spec:
       containers:
       - name: backend
         image: kastriot2022/mern-backend:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 5000
+          name: http
         env:
+        - name: NODE_ENV
+          value: "production"
+        - name: PORT
+          value: "5000"
         - name: MONGO_URI
           valueFrom:
             secretKeyRef:
               name: mongo-secret
               key: MONGO_URI
+        - name: ORIGIN
+          value: "https://mern.kastro.com"  # CORS whitelist
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 5000
+          initialDelaySeconds: 20
+          periodSeconds: 30
+          timeoutSeconds: 3
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 5000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3
+      restartPolicy: Always
